@@ -92,10 +92,7 @@ def interp_and_convert_o3d_render_json(v_cam_pose_files: List[str], save_o3d_cam
     intrinsic_node = {}
     intrinsic_node['width'] = 512
     intrinsic_node['height'] = 512
-    # cam_intrinsic = np.array([[471.11781966, 0., 359.5],
-    #                             [0., 471.11781966, 271.5],
-    #                             [0.,  0., 1. ]], dtype=np.float32)
-    cam_intrinsic = np.array([[200.0, 0., 256], [0., 200.0, 256], [0., 0., 1.]], dtype=np.float32)
+    cam_intrinsic = np.array([[150.0, 0., 256], [0., 150.0, 256], [0., 0., 1.]], dtype=np.float32)
     # cam_intrinsic = intrinsic
     cam_intrinsic_params = []
     cam_intrinsic_params += cam_intrinsic[:, 0].tolist()
@@ -188,11 +185,12 @@ def custom_draw_geometry_with_camera_trajectory(pcd:o3d.geometry.TriangleMesh,
     if render_geometry:
         vis.get_render_option().mesh_color_option = o3d.visualization.MeshColorOption.Default
     vis.get_render_option().mesh_show_back_face = False
-    if render_geometry:
-        vis.get_render_option().mesh_shade_option = o3d.visualization.MeshShadeOption.FlatShade
+    # if render_geometry:
+    #     vis.get_render_option().mesh_shade_option = o3d.visualization.MeshShadeOption.FlatShade
     vis.register_animation_callback(move_forward)
     vis.run()
-    vis.destroy_window()
+    return vis
+    
 
 
 def merge_image_sequences_to_video(img_seq1_folder: str, img_seq2_folder: str, output_video_filepath: str):
@@ -224,12 +222,13 @@ def merge_image_sequences_to_video(img_seq1_folder: str, img_seq2_folder: str, o
         assert len(v_rgb_img_file) == len(v_sem_img_file) and (len(v_rgb_img_file) > 0)
     # 根据图片的大小，创建写入对象 （文件名，支持的编码器，5帧，视频大小（图片大小））
     video_h = 512
-    video_w = 512 * 2 + 40 if img_seq2_folder is not None else 512
+    video_w = 512 * 2 if img_seq2_folder is not None else 512
+    merge_width = video_w // 2
     size = (video_w, video_h)
     # fourcc = cv2.VideoWriter_fourcc(*'XVID')
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     # videoWrite = cv2.VideoWriter(output_video_filepath, 0x00000021, 12.0, size)
-    videoWrite = cv2.VideoWriter(output_video_filepath, fourcc, 12.0, size)
+    videoWrite = cv2.VideoWriter(output_video_filepath, fourcc, 10.0, size)
 
     img_num = len(v_rgb_img_file)
     for img_idx in range(img_num):
@@ -245,8 +244,8 @@ def merge_image_sequences_to_video(img_seq1_folder: str, img_seq2_folder: str, o
         merge_img = np.ones((img_height, video_w, 3), dtype=np.uint8) * 255
         if img_seq2_folder is not None:
             # merge_img = np.concatenate((rgb_img[:, 0:merge_width], sem_img[:, merge_width:]), axis=1)
-            merge_img[:, 0:img_width, :] = rgb_img
-            merge_img[:, img_width + 40:, :] = sem_img
+            merge_img[:, 0:merge_width, :] = rgb_img
+            merge_img[:, merge_width:, :] = sem_img
         else:
             merge_img = rgb_img
         # print(f'merge_img.shape: {merge_img.shape}')
@@ -340,7 +339,7 @@ def test_perspective_img_depth():
 
 
 def visulize_textured_mesh(textured_mesh_folder:str = '/Users/fc/Desktop/papers/2024-ECCV-ctrlroom/2024eccv_experiments/ours_kitchen/',
-                           scene_name_lst:List[str] = ['kitchen_scene_03406_159']):
+                           scene_name_lst:List[str] = ['study_scene_03253_534182']):
     """ vislize textured mesh in the folder
 
     Args:
@@ -356,9 +355,9 @@ def visulize_textured_mesh(textured_mesh_folder:str = '/Users/fc/Desktop/papers/
             if sub_folder not in scene_name_lst:
                 continue
 
-        sub_folder_path = os.path.join(textured_mesh_folder, sub_folder)
-        mesh_path = os.path.join(sub_folder_path, 'rec/rec', 'model.obj')
-        # mesh_path = os.path.join(sub_folder_path, 'model.obj')
+        sub_folder_path = os.path.join(textured_mesh_folder, sub_folder, 'select_textured_mesh')
+        mesh_path = os.path.join(sub_folder_path, 'model.obj')
+        # mesh_path = os.path.join(sub_folder_path, 'model_table_move/cut_ceiling_model.obj')
         # mesh_path = os.path.join(sub_folder_path, 'cut_ceiling.ply')
         # mesh_path = os.path.join(sub_folder_path, 'model_sofa_resize', 'cut_ceiling_model.obj')
         # mesh_path = os.path.join(sub_folder_path, 'fused_final_poisson_meshlab_depth_12_quadric_10000000.ply')
@@ -378,11 +377,14 @@ if __name__ == '__main__':
     parser.add_argument('--input_folderpath', 
                       type=str, 
                       help='input folder path of generated scenes',
-                      default='/Users/fc/Desktop/papers/2024-ECCV-ctrlroom/2024eccv_experiments/ours_kitchen/')
+                      default='/Users/fc/Desktop/papers/2024-3DV-CtrlRoom/bedrooms/')
     parser.add_argument('--scene_name',
                         type=list,
                         help='specific scenes to render, if not specified, render all scenes in the input folderpath',
-                        default=['kitchen_scene_03406_159'])
+                        default=['scene_03422_794742'])
+    parser.add_argument('--vis_mesh',
+                        action='store_true',
+                        help='render geometry or not',)
     
     args = parser.parse_args()
     
@@ -390,47 +392,68 @@ if __name__ == '__main__':
     scene_name_lst = args.scene_name
     input_subfolder_lst = [f for f in os.listdir(input_folderpath) if osp.isdir(osp.join(input_folderpath, f))]
 
-    for i, sub_folder in enumerate(input_subfolder_lst):
-        # if the scene name is specified, only render the scene with the name
-        if len(scene_name_lst):
-            if sub_folder not in scene_name_lst:
-                continue
+    vis_mesh = args.vis_mesh
+    
+    # visulize textured mesh
+    if vis_mesh:
+        visulize_textured_mesh(textured_mesh_folder=input_folderpath, scene_name_lst=scene_name_lst)
+    else:
+        for i, sub_folder in enumerate(input_subfolder_lst):
+            # if the scene name is specified, only render the scene with the name
+            if len(scene_name_lst):
+                if sub_folder not in scene_name_lst:
+                    continue
 
-        scene_folderpath = osp.join(input_folderpath, sub_folder, 'rec/rec')
+            scene_folderpath = osp.join(input_folderpath, sub_folder, 'select_textured_mesh')
 
-        mesh_filepath = osp.join(scene_folderpath, 'model.obj')
-        # mesh_filepath = osp.join(scene_folderpath, 'cut_ceiling.ply')
-        # mesh_filepath = osp.join(scene_folderpath, 'fused_final_poisson_meshlab_depth_12_quadric_10000000.ply')
-        save_o3d_camera_traj_filepath = osp.join(scene_folderpath, 'camera_trajectory.json')
-        render_output_folderpath = osp.join(scene_folderpath, 'render_output')
-        if not osp.exists(render_output_folderpath):
-            os.makedirs(render_output_folderpath)
+            mesh_filepath = osp.join(scene_folderpath, 'model.obj')
+            save_o3d_camera_traj_filepath = osp.join(scene_folderpath, 'camera_trajectory.json')
+            render_output_folderpath = osp.join(scene_folderpath, 'render_output')
+            if not osp.exists(render_output_folderpath):
+                os.makedirs(render_output_folderpath)
 
-        render_option_path = 'render.json'
-        v_cam_pose_files = glob(osp.join(scene_folderpath, 'DepthCamera*.json'))
-        v_cam_pose_files.sort(key=lambda x: osp.basename(x))
-        print(v_cam_pose_files)
+            render_option_path = 'render.json'
+            v_cam_pose_files = glob(osp.join(scene_folderpath, 'DepthCamera*.json'))
+            v_cam_pose_files.sort(key=lambda x: osp.basename(x))
+            print(v_cam_pose_files)
 
-        # interpolated_camera_trajectory  and save to json
-        interp_and_convert_o3d_render_json(v_cam_pose_files, save_o3d_camera_traj_filepath)
+            # interpolated_camera_trajectory  and save to json
+            interp_and_convert_o3d_render_json(v_cam_pose_files, save_o3d_camera_traj_filepath)
 
-        pcd_flipped = o3d.io.read_triangle_mesh(mesh_filepath, True)
-        pcd_flipped.compute_vertex_normals()
-        print("6. Customized visualization playing a camera trajectory")
-        custom_draw_geometry_with_camera_trajectory(pcd_flipped, 
-                                                    render_option_path, 
-                                                    save_o3d_camera_traj_filepath,
-                                                    render_geometry=False,
-                                                    render_output_path=render_output_folderpath)
+            render_modes = ['texture', 'geometry']
+            for render_mode in render_modes:
+                print("6. Customized visualization playing a camera trajectory")
+                
+                pcd_flipped = o3d.io.read_triangle_mesh(mesh_filepath, True)
+                
+                if 'geometry' == render_mode:
+                    pcd_flipped.compute_vertex_normals()
+                o3d_vis = custom_draw_geometry_with_camera_trajectory(pcd_flipped, 
+                                                            render_option_path, 
+                                                            save_o3d_camera_traj_filepath,
+                                                            render_geometry='geometry' == render_mode,
+                                                            render_output_path=render_output_folderpath)
 
-        video_path = osp.join(scene_folderpath, 'video.mp4')
-        merge_image_sequences_to_video(img_seq1_folder=osp.join(render_output_folderpath, 'image'), img_seq2_folder=None, output_video_filepath=video_path)
+                if 'geometry' == render_mode:
+                    video_path = osp.join(scene_folderpath, 'mesh_video.mp4')
+                    img_seq_folder = osp.join(render_output_folderpath, 'geometry')
+                else:
+                    video_path = osp.join(scene_folderpath, 'rgb_video.mp4')
+                    img_seq_folder = osp.join(render_output_folderpath, 'image')
+                # save video
+                merge_image_sequences_to_video(img_seq1_folder=img_seq_folder, 
+                                                img_seq2_folder=None, 
+                                                output_video_filepath=video_path)
+                o3d_vis.destroy_window()
 
 
-    # merge image sequences of ours, other approaches into a common video
-    # text2room_render_img_folderpath = '/Users/fc/Desktop/papers/2024-iclr-roomeditor/mesh_generation_experiments/text2room_results/livingroom_scene_03049_284331/render_output/image/'
-    # our_render_img_folderpath = '/Users/fc/Desktop/papers/2024-iclr-roomeditor/mesh_generation_experiments/our_results/livingroom_scene_03049_284331/model_raw/render_output/image'
-    # video_path = '/Users/fc/Desktop/papers/2024-iclr-roomeditor/mesh_generation_experiments/teaser_scene_03049_284331.mp4'
-    # merge_image_sequences_to_video(img_seq1_folder=text2room_render_img_folderpath, img_seq2_folder=our_render_img_folderpath, output_video_filepath=video_path)
+            # merge image sequences of ours, other approaches into a common video
+            tex_render_img_folderpath = f'{scene_folderpath}/render_output/image'
+            geo_render_img_folderpath = f'{scene_folderpath}/render_output/geometry'
+            video_path = f'{scene_folderpath}/render_output/rgb_geometry.mp4'
+            if osp.exists(tex_render_img_folderpath) and osp.exists(geo_render_img_folderpath):
+                merge_image_sequences_to_video(img_seq1_folder=tex_render_img_folderpath, 
+                                            img_seq2_folder=geo_render_img_folderpath, 
+                                            output_video_filepath=video_path)
 
 
